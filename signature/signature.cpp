@@ -1,4 +1,6 @@
-﻿#define _SILENCE_EXPERIMENTAL_FILESYSTEM_DEPRECATION_WARNING
+#include "signature.h"
+
+#define _SILENCE_EXPERIMENTAL_FILESYSTEM_DEPRECATION_WARNING
 
 #include <iostream>
 #include <fstream>
@@ -9,58 +11,58 @@
 #include <cmath>
 #include <algorithm>
 
-const int BLOCK_SIZE = 1024 * 1024; // размер блока в байтах
+#include "md5.h"
 
-void fillBuffer(char* src, size_t length, size_t max_data_length, std::string& buffer) {
-    buffer = "";
-    for (int i = 0; i < max_data_length; i++) {
+std::string extractDataBlock(char* src, size_t length, size_t maxDataLength) {
+    std::string buffer;
+    if (maxDataLength < length) {
+        for (int i = 0; i < maxDataLength; i++) {
+            buffer += src[i];
+        }
+        int paddingCount = length - maxDataLength;
+        for (int i = 0; i < paddingCount; i++) {
+            buffer += char(0);
+        }
+        return buffer;
+    }
+    
+    for (int i = 0; i < length; i++) {
         buffer += src[i];
     }
-    int paddingCount = length - max_data_length;
-    for (int i = 0; i < paddingCount; i++) {
-        buffer += char(0);
-    }
+    return buffer;
 }
 
-int main(int argc, char* argv[]) {
-    
-    std::string input_filepath = "hello.txt";
-    std::fstream input_file;
-    input_file.open(input_filepath, std::ios_base::in | std::ios_base::binary);
+int getFileSignature(const char* inputFilepath, const char* outputFilepath, const int blockSize) {
 
-    std::string output_filepath = "hello_out.txt";
-    std::fstream output_file;
-    output_file.open(output_filepath, std::ios_base::out | std::ios_base::binary);
-    
-    if (!input_file.is_open() && !output_file.is_open()) {
+    std::fstream inputFile;
+    inputFile.open(inputFilepath, std::ios_base::in | std::ios_base::binary);
 
+    std::fstream outputFile;
+    outputFile.open(outputFilepath, std::ios_base::out | std::ios_base::binary);
+
+    if (!inputFile.is_open() || !outputFile.is_open()) {
+        std::cout << "can't open files" << std::endl;
         return 1;
     }
 
-    int file_size = std::experimental::filesystem::file_size(input_filepath) + 1;
-    char* bytes = new char[file_size];
-    input_file.read(bytes, file_size);
+    int fileSize = std::experimental::filesystem::file_size(inputFilepath) + 1;
+    char* bytes = new char[fileSize];
+    inputFile.read(bytes, fileSize);
 
     std::cout << bytes << std::endl;
 
-    size_t batches = ceil((double)file_size / (double)BLOCK_SIZE);
+    size_t batches = ceil((double)fileSize / (double)blockSize);
 
-    std::string buffer;
-    buffer.reserve(BLOCK_SIZE);
-    std::hash<std::string> hasher;
+    MD5 hasher;
 
     for (int i = 0; i < batches; i++) {
-        fillBuffer((bytes + i * BLOCK_SIZE), BLOCK_SIZE, file_size, buffer);
-
-        auto hashValue = hasher(buffer);
-
-        output_file << hashValue;
+        std::string hashValue = hasher(extractDataBlock((bytes + i * blockSize), blockSize, fileSize - i * blockSize));
+        outputFile << hashValue;
     }
 
-    input_file.close();
-    output_file.close();
-    delete[]bytes;
-    
+    inputFile.close();
+    outputFile.close();
+    delete[] bytes;
+
     return 0;
 }
-
